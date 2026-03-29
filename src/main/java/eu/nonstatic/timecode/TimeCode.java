@@ -204,7 +204,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
     return (hundredths * FRAMES_PER_SECOND + FRAMES_PER_SECOND - 1) / HUNDRED;
   }
 
-  TimeCode scale100to75() {
+  public TimeCode scale100to75() {
     if(isScaled100to75()) {
       return this;
     } else {
@@ -212,7 +212,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
     }
   }
 
-  boolean isScaled100to75() {
+  public boolean isScaled100to75() {
     return frames != rawFrames;
   }
 
@@ -243,7 +243,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
     return format(minutes, seconds, frames);
   }
 
-  String toStringRaw() {
+  public String toStringRaw() {
     return format(minutes, seconds, rawFrames);
   }
   private static String format(int minutes, int seconds, int frames) {
