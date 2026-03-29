@@ -1,0 +1,84 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'jacoco'
+    id 'maven-publish'
+    id "org.sonarqube" version "4.4.1.3373"
+}
+
+group = "eu.nonstatic"
+version = "1.0.0"
+
+repositories {
+    maven {
+        url = "https://maven.pkg.github.com/nonstaticeu/audiolib"
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+            password = System.getenv("GITHUB_TOKEN")
+        }
+    }
+    mavenLocal()
+    mavenCentral()
+}
+
+def lombokVersion = '1.18.44'
+
+dependencies {
+    annotationProcessor("org.projectlombok:lombok:$lombokVersion")
+    implementation('org.slf4j:slf4j-api:2.0.17')
+    compileOnly("org.projectlombok:lombok:$lombokVersion")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.14.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+configurations.implementation {
+    exclude group: 'org.slf4j', module: 'slf4j-simple'
+}
+
+
+java {
+    sourceCompatibility = JavaVersion.toVersion("11")
+    targetCompatibility = JavaVersion.toVersion("11")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.compilerArgs.add('-parameters')
+}
+
+
+// use JUnit 5 platform
+test {
+    testLogging.showStandardStreams = true
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        mavenLocal()
+        maven {
+            name = "GitHubPackages"
+            url = "https://maven.pkg.github.com/nonstaticeu/timecode"
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
