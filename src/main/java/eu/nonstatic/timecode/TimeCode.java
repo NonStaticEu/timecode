@@ -72,7 +72,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
   }
 
 
-  public TimeCode(long millis) {
+  private TimeCode(long millis) {
     this(millis, DEFAULT_ROUNDING);
   }
 
@@ -81,7 +81,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
    * rounding UP tends to create time ranges exceeding the original duration
    * rounding DOWN tends to create time ranges cropping the original duration
    */
-  public TimeCode(long millis, TimeCodeRounding rounding) {
+  private TimeCode(long millis, TimeCodeRounding rounding) {
     this(
         (int) (millis / (SECONDS_PER_MINUTE * MILLIS_PER_SECOND)),
         (int) ((millis / MILLIS_PER_SECOND) % SECONDS_PER_MINUTE),
@@ -102,6 +102,23 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
 
   public TimeCode(TimeCode timeCode) {
     this(timeCode.minutes, timeCode.seconds, timeCode.frames, timeCode.rawFrames, timeCode.rounding);
+  }
+
+  public static TimeCode ofMillis(long millis) {
+    return new TimeCode(millis);
+  }
+
+  /**
+   * Caution:
+   * rounding UP tends to create time ranges exceeding the original duration
+   * rounding DOWN tends to create time ranges cropping the original duration
+   */
+  public static TimeCode ofMillis(long millis, TimeCodeRounding rounding) {
+    return new TimeCode(millis, rounding);
+  }
+
+  public static TimeCode ofSeconds(long seconds) {
+    return ofMillis(seconds * 1_000L);
   }
 
   public static TimeCode ofFrames(int frames) {
