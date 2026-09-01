@@ -10,12 +10,19 @@
 package eu.nonstatic.timecode;
 
 import static java.lang.Integer.parseInt;
+import static java.time.temporal.ChronoUnit.NANOS;
+import static java.time.temporal.ChronoUnit.SECONDS;
 import static java.util.Objects.requireNonNullElse;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.temporal.Temporal;
+import java.time.temporal.TemporalAmount;
+import java.time.temporal.TemporalUnit;
+import java.time.temporal.UnsupportedTemporalTypeException;
 import java.util.Comparator;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -25,21 +32,23 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Getter
-public final class TimeCode implements Comparable<TimeCode>, Serializable {
+public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Serializable {
 
   public static final int FRAMES_PER_SECOND = 75;
-  public static final int MILLIS_PER_SECOND = 1000;
-  public static final BigDecimal MILLIS_PER_SECOND_BD = BigDecimal.valueOf(MILLIS_PER_SECOND);
-  private static final int HUNDRED = 100;
   public static final int SECONDS_PER_MINUTE = 60;
+  public static final int MILLIS_PER_SECOND = 1_000;
+  public static final long NANOS_PER_SECOND = 1_000_000_000L;
+  private static final long NANOS_PER_MILLI = NANOS_PER_SECOND / MILLIS_PER_SECOND;
+  private static final BigDecimal NANOS_PER_SECOND_BD = BigDecimal.valueOf(NANOS_PER_SECOND);
+  private static final int HUNDRED = 100;
   public static final int MAX_CDR_MINUTES = 100; // yes I know about the red book, but there's this too: https://www.amazon.com/dp/B000R4LZ3A
-  public static final Comparator<TimeCode> COMPARATOR = Comparator.comparing(TimeCode::toFrameCount);
+  public static final Comparator<TimeCode> COMPARATOR = Comparator.comparing(TimeCode::toFrames);
 
   public static final TimeCode ZERO_SECOND = new TimeCode(0, 0, 0);
   public static final TimeCode ONE_SECOND = new TimeCode(0, 1, 0);
   public static final TimeCode TWO_SECONDS = new TimeCode(0, 2, 0);
   static final TimeCodeRounding DEFAULT_ROUNDING = TimeCodeRounding.CLOSEST;
-
+  private static final List<TemporalUnit> UNITS = List.of(SECONDS, NANOS);
 
   private final int minutes;
   private final int seconds;
@@ -72,7 +81,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
   }
 
 
-  public TimeCode(long millis) {
+  private TimeCode(long millis) {
     this(millis, DEFAULT_ROUNDING);
   }
 
@@ -81,27 +90,52 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
    * rounding UP tends to create time ranges exceeding the original duration
    * rounding DOWN tends to create time ranges cropping the original duration
    */
-  public TimeCode(long millis, TimeCodeRounding rounding) {
+  private TimeCode(long nanos, TimeCodeRounding rounding) {
     this(
-        (int) (millis / (SECONDS_PER_MINUTE * MILLIS_PER_SECOND)),
-        (int) ((millis / MILLIS_PER_SECOND) % SECONDS_PER_MINUTE),
-        BigDecimal.valueOf(FRAMES_PER_SECOND * (millis % MILLIS_PER_SECOND))
-            .divide(MILLIS_PER_SECOND_BD, requireNonNullElse(rounding, DEFAULT_ROUNDING).roundingMode)
+        (int) (nanos / (SECONDS_PER_MINUTE * NANOS_PER_SECOND)),
+        (int) ((nanos / NANOS_PER_SECOND) % SECONDS_PER_MINUTE),
+        BigDecimal.valueOf(FRAMES_PER_SECOND * (nanos % NANOS_PER_SECOND))
+            .divide(NANOS_PER_SECOND_BD, requireNonNullElse(rounding, DEFAULT_ROUNDING).roundingMode)
             .intValue(),
         rounding
     );
   }
 
   public TimeCode(Duration duration) {
-    this(duration.toMillis());
+    this(duration.toNanos());
   }
 
   public TimeCode(Duration duration, TimeCodeRounding rounding) {
-    this(duration.toMillis(), rounding);
+    this(duration.toNanos(), rounding);
   }
 
   public TimeCode(TimeCode timeCode) {
     this(timeCode.minutes, timeCode.seconds, timeCode.frames, timeCode.rawFrames, timeCode.rounding);
+  }
+
+  public static TimeCode ofNanos(long nanos) {
+    return new TimeCode(nanos);
+  }
+
+  public static TimeCode ofNanos(long nanos, TimeCodeRounding rounding) {
+    return new TimeCode(nanos, rounding);
+  }
+
+  public static TimeCode ofMillis(long millis) {
+    return new TimeCode(millis * NANOS_PER_MILLI);
+  }
+
+  /**
+   * Caution:
+   * rounding UP tends to create time ranges exceeding the original duration
+   * rounding DOWN tends to create time ranges cropping the original duration
+   */
+  public static TimeCode ofMillis(long millis, TimeCodeRounding rounding) {
+    return new TimeCode(millis * NANOS_PER_MILLI, rounding);
+  }
+
+  public static TimeCode ofSeconds(long seconds) {
+    return ofMillis(seconds * 1_000L);
   }
 
   public static TimeCode ofFrames(int frames) {
@@ -139,17 +173,35 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
     return new TimeCode(this.minutes, this.seconds, frames);
   }
 
-  public int toFrameCount() {
+  public int toFrames() {
     return (minutes * SECONDS_PER_MINUTE + seconds) * FRAMES_PER_SECOND + frames;
   }
 
+  public long toSeconds() {
+    return (long) minutes * SECONDS_PER_MINUTE + seconds;
+  }
+
   public long toMillis() {
-    return ((long) minutes * SECONDS_PER_MINUTE + seconds) * MILLIS_PER_SECOND
-        + (((long) frames * MILLIS_PER_SECOND + FRAMES_PER_SECOND - 1) / FRAMES_PER_SECOND); // upper rounding
+    return toSeconds() * MILLIS_PER_SECOND + toMillisPart();
+  }
+
+  public long toNanos() {
+    return toSeconds() * NANOS_PER_SECOND + toNanosPart();
+  }
+
+  /**
+   * @return the millis part with upper rounding based on the frames
+   */
+  public long toMillisPart() {
+    return ((long) frames * MILLIS_PER_SECOND + FRAMES_PER_SECOND/2) / FRAMES_PER_SECOND; // adding half of the precision for rounding
+  }
+
+  public long toNanosPart() {
+    return ((long) frames * NANOS_PER_SECOND + FRAMES_PER_SECOND/2) / FRAMES_PER_SECOND; // adding half of the precision for rounding
   }
 
   public Duration toDuration() {
-    return Duration.ofMillis(toMillis());
+    return Duration.ofNanos(toNanos());
   }
 
   /**
@@ -185,25 +237,33 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
   }
 
   public Duration minus(TimeCode other) {
-    int framesDiff = toFrameCount() - other.toFrameCount();
-    long millisDiff = Math.round(((double) (MILLIS_PER_SECOND * framesDiff)) / FRAMES_PER_SECOND); // Converting frames diff instead of millis diff to have a result in 75th's of a second
-    return Duration.ofMillis(millisDiff);
+    int framesDiff = toFrames() - other.toFrames();
+    long nanosDiff = Math.round(((double) (NANOS_PER_SECOND * framesDiff)) / FRAMES_PER_SECOND); // Converting frames diff instead of millis diff to have a result in 75th's of a second
+    return Duration.ofNanos(nanosDiff);
   }
 
   public TimeCode minus(Duration other) {
-    return minus(other.toMillis());
+    return minusNanos(other.toNanos());
   }
 
-  public TimeCode minus(long otherMillis) {
-    return new TimeCode(toMillis() - otherMillis, rounding);
+  public TimeCode minusNanos(long nanos) {
+    return new TimeCode(toNanos() - nanos, rounding);
+  }
+
+  public TimeCode minusMillis(long millis) {
+    return minusNanos(millis * NANOS_PER_MILLI);
   }
 
   public TimeCode plus(Duration other) {
-    return plus(other.toMillis());
+    return plusNanos(other.toNanos());
   }
 
-  public TimeCode plus(long otherMillis) {
-    return new TimeCode(toMillis() + otherMillis, rounding);
+  public TimeCode plusNanos(long nanos) {
+    return new TimeCode(toNanos() + nanos, rounding);
+  }
+
+  public TimeCode plusMillis(long otherMillis) {
+    return plusNanos(otherMillis * NANOS_PER_MILLI);
   }
 
   public static int scale100to75(int hundredths) {
@@ -226,6 +286,45 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
   }
 
   @Override
+  public long get(TemporalUnit unit) {
+    if (unit == SECONDS) {
+      return seconds;
+    } else if (unit == NANOS) {
+      return toNanosPart();
+    } else {
+      throw new UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+    }
+  }
+
+  @Override
+  public List<TemporalUnit> getUnits() {
+    return UNITS;
+  }
+
+
+  @Override
+  public Temporal addTo(Temporal temporal) {
+    if (seconds != 0) {
+      temporal = temporal.plus(seconds, SECONDS);
+    }
+    if (frames != 0) {
+      temporal = temporal.plus(toNanosPart(), NANOS);
+    }
+    return temporal;
+  }
+
+  @Override
+  public Temporal subtractFrom(Temporal temporal) {
+    if (seconds != 0) {
+      temporal = temporal.minus(seconds, SECONDS);
+    }
+    if (frames != 0) {
+      temporal = temporal.minus(toNanosPart(), NANOS);
+    }
+    return temporal;
+  }
+
+  @Override
   public int compareTo(TimeCode other) {
     return COMPARATOR.compare(this, other);
   }
@@ -239,12 +338,12 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
       return false;
     }
 
-    return toFrameCount() == ((TimeCode)other).toFrameCount();
+    return toFrames() == ((TimeCode)other).toFrames();
   }
 
   @Override
   public int hashCode() {
-    return toFrameCount();
+    return toFrames();
   }
 
   @Override
@@ -255,6 +354,7 @@ public final class TimeCode implements Comparable<TimeCode>, Serializable {
   public String toStringRaw() {
     return format(minutes, seconds, rawFrames);
   }
+
   private static String format(int minutes, int seconds, int frames) {
     return String.format("%02d:%02d:%02d", minutes, seconds, frames);
   }

@@ -3,11 +3,11 @@ plugins {
     id 'java-library'
     id 'jacoco'
     id 'maven-publish'
-    id "org.sonarqube" version "4.4.1.3373"
+    id "org.sonarqube" version "7.3.1.8318"
 }
 
 group = "eu.nonstatic"
-version = "1.0.0"
+version = "1.1.0"
 
 repositories {
     maven {
@@ -21,14 +21,14 @@ repositories {
     mavenCentral()
 }
 
-def lombokVersion = '1.18.44'
+def lombokVersion = '1.18.46'
 
 dependencies {
     annotationProcessor("org.projectlombok:lombok:$lombokVersion")
-    implementation('org.slf4j:slf4j-api:2.0.17')
+    implementation('org.slf4j:slf4j-api:2.0.18')
     compileOnly("org.projectlombok:lombok:$lombokVersion")
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.14.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
