@@ -95,7 +95,7 @@ class TimeCodeTest {
 
   @Test
   void should_build_from_duration() {
-    TimeCode timeCode = new TimeCode(Duration.ofMillis(620400L), TimeCode.DEFAULT_ROUNDING);
+    TimeCode timeCode = TimeCode.ofDuration(Duration.ofMillis(620400L), TimeCode.DEFAULT_ROUNDING);
     assertEquals("10:20:30", timeCode.toString());
   }
 
@@ -279,20 +279,20 @@ class TimeCodeTest {
   }
 
   @Test
-  void should_overflow_frames_when_rounding_at_the_very_end_of_a_second() {
+  void should_adjust_seconds_and_frames_when_rounding_at_the_very_end_of_a_second() {
     // 999_999_999ns == frame 74.999999925, which rounds to a 75th frame the mm:ss:ff form cannot hold
     assertEquals("00:00:74", TimeCode.ofNanos(999_999_999L, TimeCodeRounding.DOWN).toString());
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofNanos(999_999_999L, TimeCodeRounding.CLOSEST));
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofNanos(999_999_999L, TimeCodeRounding.UP));
+    assertEquals("00:01:00", TimeCode.ofNanos(999_999_999L, TimeCodeRounding.CLOSEST).toString());
+    assertEquals("00:01:00", TimeCode.ofNanos(999_999_999L, TimeCodeRounding.UP).toString());
 
     // CLOSEST only tips over past the half-frame mark, UP tips over on any remainder
     assertEquals("00:00:74", TimeCode.ofNanos(993_333_333L, TimeCodeRounding.CLOSEST).toString()); // frame 74.499999975
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofNanos(993_333_334L, TimeCodeRounding.CLOSEST)); // frame 74.50000005
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofNanos(986_666_668L, TimeCodeRounding.UP)); // frame 74.0000001
+    assertEquals("00:01:00", TimeCode.ofNanos(993_333_334L, TimeCodeRounding.CLOSEST).toString()); // frame 74.50000005
+    assertEquals("00:01:00", TimeCode.ofNanos(986_666_668L, TimeCodeRounding.UP).toString()); // frame 74.0000001
 
     // and it propagates to the arithmetic, since it goes through the same ctor
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofNanos(2_000_000_000L, TimeCodeRounding.UP).minusNanos(1L));
-    assertThrows(IllegalArgumentException.class, () -> TimeCode.ofMillis(999L, TimeCodeRounding.UP));
+    assertEquals("00:02:00", TimeCode.ofNanos(2_000_000_000L, TimeCodeRounding.UP).minusNanos(1L).toString());
+    assertEquals("00:01:00", TimeCode.ofMillis(999L, TimeCodeRounding.UP).toString());
   }
 
   @Test
