@@ -80,70 +80,52 @@ public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Ser
     this(minutes, seconds, frames, frames, DEFAULT_ROUNDING);
   }
 
-
-  private TimeCode(long millis) {
-    this(millis, DEFAULT_ROUNDING);
-  }
-
-  /**
-   * Caution:
-   * rounding UP tends to create time ranges exceeding the original duration
-   * rounding DOWN tends to create time ranges cropping the original duration
-   */
-  private TimeCode(long nanos, TimeCodeRounding rounding) {
-    this(
-        (int) (nanos / (SECONDS_PER_MINUTE * NANOS_PER_SECOND)),
-        (int) ((nanos / NANOS_PER_SECOND) % SECONDS_PER_MINUTE),
-        BigDecimal.valueOf(FRAMES_PER_SECOND * (nanos % NANOS_PER_SECOND))
-            .divide(NANOS_PER_SECOND_BD, requireNonNullElse(rounding, DEFAULT_ROUNDING).roundingMode)
-            .intValue(),
-        rounding
-    );
-  }
-
-  public TimeCode(Duration duration) {
-    this(duration.toNanos());
-  }
-
-  public TimeCode(Duration duration, TimeCodeRounding rounding) {
-    this(duration.toNanos(), rounding);
-  }
-
   public TimeCode(TimeCode timeCode) {
     this(timeCode.minutes, timeCode.seconds, timeCode.frames, timeCode.rawFrames, timeCode.rounding);
   }
 
+  public static TimeCode ofDuration(Duration duration) {
+    return ofNanos(duration.toNanos());
+  }
+
+  public static TimeCode ofDuration(Duration duration, TimeCodeRounding rounding) {
+    return ofNanos(duration.toNanos(), rounding);
+  }
+
   public static TimeCode ofNanos(long nanos) {
-    return new TimeCode(nanos);
+    return ofNanos(nanos, DEFAULT_ROUNDING);
   }
 
   public static TimeCode ofNanos(long nanos, TimeCodeRounding rounding) {
-    return new TimeCode(nanos, rounding);
+    int frames = FRAMES_PER_SECOND * (int)(nanos / NANOS_PER_SECOND)
+        + BigDecimal.valueOf(FRAMES_PER_SECOND * (nanos % NANOS_PER_SECOND))
+        .divide(NANOS_PER_SECOND_BD, requireNonNullElse(rounding, DEFAULT_ROUNDING).roundingMode)
+        .intValue();
+    return ofFrames(frames, rounding);
   }
 
   public static TimeCode ofMillis(long millis) {
-    return new TimeCode(millis * NANOS_PER_MILLI);
+    return ofNanos(millis * NANOS_PER_MILLI);
   }
 
-  /**
-   * Caution:
-   * rounding UP tends to create time ranges exceeding the original duration
-   * rounding DOWN tends to create time ranges cropping the original duration
-   */
   public static TimeCode ofMillis(long millis, TimeCodeRounding rounding) {
-    return new TimeCode(millis * NANOS_PER_MILLI, rounding);
+    return ofNanos(millis * NANOS_PER_MILLI, rounding);
   }
 
   public static TimeCode ofSeconds(long seconds) {
-    return ofMillis(seconds * 1_000L);
+    return ofMillis(seconds * MILLIS_PER_SECOND);
   }
 
   public static TimeCode ofFrames(int frames) {
+    return ofFrames(frames, DEFAULT_ROUNDING);
+  }
+
+  private static TimeCode ofFrames(int frames, TimeCodeRounding rounding) {
     int ff = frames % FRAMES_PER_SECOND;
     int ts = frames / FRAMES_PER_SECOND;
     int mm  = ts / SECONDS_PER_MINUTE;
     int ss = ts % SECONDS_PER_MINUTE;
-    return new TimeCode(mm, ss, ff);
+    return new TimeCode(mm, ss, ff, rounding);
   }
 
   public static void validate(int minutes, int seconds, int frames) {
@@ -206,7 +188,7 @@ public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Ser
 
   /**
    * @param timeCode mm:ss:ff (minutes:seconds:frames) format
-   * @return
+   * @return the parsed TimeCode
    */
   public static TimeCode parse(String timeCode) {
     return parse(timeCode, false);
@@ -215,7 +197,7 @@ public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Ser
   /**
    * @param timeCode mm:ss:ff (minutes:seconds:frames) format
    * @param lenient interpolates hundredths of a second identified with frame values in range [75-99] to actual frame value
-   * @return
+   * @return the parsed TimeCode
    */
   public static TimeCode parse(String timeCode, boolean lenient) {
     String[] parts = timeCode.split(":");
@@ -247,7 +229,7 @@ public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Ser
   }
 
   public TimeCode minusNanos(long nanos) {
-    return new TimeCode(toNanos() - nanos, rounding);
+    return ofNanos(toNanos() - nanos, rounding);
   }
 
   public TimeCode minusMillis(long millis) {
@@ -259,7 +241,7 @@ public final class TimeCode implements TemporalAmount, Comparable<TimeCode>, Ser
   }
 
   public TimeCode plusNanos(long nanos) {
-    return new TimeCode(toNanos() + nanos, rounding);
+    return ofNanos(toNanos() + nanos, rounding);
   }
 
   public TimeCode plusMillis(long otherMillis) {
